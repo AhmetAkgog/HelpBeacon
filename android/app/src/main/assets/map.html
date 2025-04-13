@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live BLE GPS Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html, body, #map {
+          height: 100%;
+          margin: 0;
+          padding: 0;
+        }
+    </style>
+    <link
+            rel="stylesheet"
+            href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+            integrity="sha256-sA+4j7FVZF+YkF46ldHZXTCXfRQ7e6tzANpWyXvF0XI="
+            crossorigin=""
+    />
+</head>
+<body>
+<div id="map"></div>
+
+<script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-o9N1j7kJ8FMCyT1ADoP7phHgRSEFfP2rtWb33B3F0YM="
+        crossorigin=""
+></script>
+
+<script>
+    // Initial center
+    const map = L.map('map').setView([48.1351, 11.5820], 13); // Default to Munich
+    const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    });
+    tileLayer.addTo(map);
+
+    let marker = null;
+
+    // 👇 This is the function React Native will call
+    function updateMap(lat, lon) {
+      if (!marker) {
+        marker = L.marker([lat, lon]).addTo(map);
+      } else {
+        marker.setLatLng([lat, lon]);
+      }
+      map.setView([lat, lon], 16);
+    }
+</script>
+</body>
+</html>

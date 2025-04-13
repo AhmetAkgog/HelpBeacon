@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { BleManager, State } from 'react-native-ble-plx';
 import { decode as atob } from 'base-64';
+import { WebView } from 'react-native-webview';
 
 const manager = new BleManager();
 const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
@@ -22,6 +23,7 @@ const App = () => {
   const [connectedDevice, setConnectedDevice] = useState(null);
   const [gpsData, setGpsData] = useState('');
   const [gpsLog, setGpsLog] = useState([]);
+  const webViewRef = useRef(null);
 
   useEffect(() => {
     let stateSub = null;
@@ -38,7 +40,6 @@ const App = () => {
       }
 
       const results = await PermissionsAndroid.requestMultiple(permissions);
-
       const denied = Object.entries(results).filter(
         ([, result]) => result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
       );
@@ -134,6 +135,17 @@ const App = () => {
                     console.log('📡 GPS Data:', decoded);
                     setGpsData(decoded);
                     setGpsLog(prev => [decoded, ...prev].slice(0, 20));
+
+                    // 🚀 Inject GPS data into WebView map
+                    const parsed = decoded.split(',');
+                    const lat = parseFloat(parsed[0]);
+                    const lon = parseFloat(parsed[1]);
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                      webViewRef.current?.injectJavaScript(`
+                        updateMap(${lat}, ${lon});
+                        true;
+                      `);
+                    }
                   }
                 }
               );
@@ -176,28 +188,32 @@ const App = () => {
     </ScrollView>
   );
 
-  const parsed = gpsData.includes(',') ? gpsData.split(',') : [];
-  const latitude = parsed[0] || '';
-  const longitude = parsed[1] || '';
-
   return (
-    <View style={{ flex: 1, paddingTop: 50, paddingHorizontal: 20 }}>
+    <View style={{ flex: 1 }}>
       {connectedDevice ? (
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontSize: 18, marginBottom: 10 }}>Connected to: {connectedDevice.name}</Text>
-          <Text style={{ fontSize: 20, fontWeight: 'bold' }}>GPS Output</Text>
-          {latitude && longitude ? (
-            <>
-              <Text style={{ fontSize: 16 }}>Latitude: {latitude}</Text>
-              <Text style={{ fontSize: 16 }}>Longitude: {longitude}</Text>
-            </>
-          ) : (
-            <Text style={{ fontSize: 16, color: '#999' }}>Waiting for valid GPS data...</Text>
-          )}
-          {renderLog()}
-        </View>
+        <>
+          <View style={{ paddingTop: 40, paddingHorizontal: 20 }}>
+            <Text style={{ fontSize: 18, marginBottom: 10 }}>Connected to: {connectedDevice.name}</Text>
+            <Text style={{ fontSize: 20, fontWeight: 'bold' }}>GPS Output</Text>
+            {gpsData ? (
+              <Text style={{ fontSize: 16 }}>{gpsData}</Text>
+            ) : (
+              <Text style={{ fontSize: 16, color: '#999' }}>Waiting for GPS data...</Text>
+            )}
+            {renderLog()}
+          </View>
+          <WebView
+            ref={webViewRef}
+            source={{ uri: 'file:///android_asset/map.html' }}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+          />
+        </>
       ) : (
         <FlatList
+          contentContainerStyle={{ paddingTop: 50 }}
           data={devices}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
