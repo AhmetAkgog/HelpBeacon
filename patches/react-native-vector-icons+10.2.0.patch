@@ -1,0 +1,16 @@
+diff --git a/node_modules/react-native-vector-icons/android/build.gradle b/node_modules/react-native-vector-icons/android/build.gradle
+index 3e615e9..fc9e2e7 100644
+--- a/node_modules/react-native-vector-icons/android/build.gradle
++++ b/node_modules/react-native-vector-icons/android/build.gradle
+@@ -23,7 +23,10 @@ if (isNewArchitectureEnabled()) {
+ android {
+     namespace = "com.oblador.vectoricons"
+     compileSdkVersion safeExtGet('compileSdkVersion', 31)
+-
++    buildFeatures {
++        buildConfig true
++    }
++    namespace 'com.oblador.vectoricons'
+     defaultConfig {
+         minSdkVersion safeExtGet('minSdkVersion', 21)
+         targetSdkVersion safeExtGet('targetSdkVersion', 31)
