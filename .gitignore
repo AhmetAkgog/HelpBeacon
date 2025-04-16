@@ -71,3 +71,6 @@ ios/Pods/
 *.keystore
 build/
 .DS_Store
+
+firebaseConfig.js
+android/app/google-services.json 

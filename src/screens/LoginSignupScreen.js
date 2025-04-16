@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getDatabase, ref, set } from 'firebase/database'; // ✅ Firebase DB
 import {
   View,
   Text,
@@ -7,7 +8,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import { auth } from '../firebaseConfig'; // adjust if path differs
+import { auth } from '../firebaseConfig';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -29,7 +30,15 @@ const LoginSignupScreen = () => {
         await signInWithEmailAndPassword(auth, email, password);
         Alert.alert('Success', 'Logged in successfully!');
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // ✅ Write the user to /users/<uid>
+        const db = getDatabase();
+        await set(ref(db, `users/${user.uid}`), {
+          email: user.email,
+        });
+
         Alert.alert('Success', 'Account created successfully!');
       }
     } catch (error) {

@@ -1,9 +1,5 @@
-/**
- * @format
- */
+import { AppRegistry } from 'react-native';
+import App from './App'; // ✅ this is what you want
+import { name as appName } from './app.json';
 
-import {AppRegistry} from 'react-native';
-import AuthWrapper from './src/screens/AuthWrapper';
-import {name as appName} from './app.json';
-
-AppRegistry.registerComponent(appName, () => AuthWrapper);
+AppRegistry.registerComponent(appName, () => App);

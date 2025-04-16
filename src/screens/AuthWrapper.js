@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator } from '@react-navigation/stack';
 import LoginSignupScreen from './LoginSignupScreen';
+import MainTabs from './MainTabs';
 import { auth } from '../firebaseConfig';
 
-const Stack = createNativeStackNavigator();
+const Stack = createStackNavigator();
 
-const AuthWrapper = ({ BleGpsScreen }) => {
+const AuthWrapper = () => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -16,21 +16,14 @@ const AuthWrapper = ({ BleGpsScreen }) => {
     return unsubscribe;
   }, []);
 
-  console.log('✅ LoginSignupScreen:', typeof LoginSignupScreen);
-  console.log('✅ BleGpsScreen:', typeof BleGpsScreen);
-
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {user ? (
-          <Stack.Screen name="Home">
-            {() => <BleGpsScreen />}
-          </Stack.Screen>
-        ) : (
-          <Stack.Screen name="Auth" component={LoginSignupScreen} />
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {user ? (
+        <Stack.Screen name="Home" component={MainTabs} />
+      ) : (
+        <Stack.Screen name="Login" component={LoginSignupScreen} />
+      )}
+    </Stack.Navigator>
   );
 };
 
