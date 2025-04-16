@@ -1,3 +1,5 @@
+###NOTE### firebaseConfig.js and google-service.json not included
+
 npm install
 
 npx react-native run-android
