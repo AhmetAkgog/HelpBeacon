@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,15 +6,16 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import { getDatabase, ref, get, onValue } from 'firebase/database';
 import { auth } from '../firebaseConfig';
+import { WebView } from 'react-native-webview';
 
 const HomeScreen = () => {
   const db = getDatabase();
   const currentUID = auth.currentUser?.uid;
   const [loading, setLoading] = useState(true);
   const [emergencyFriends, setEmergencyFriends] = useState([]);
+  const webViewRef = useRef(null);
 
   useEffect(() => {
     if (!currentUID) return;
@@ -24,8 +25,6 @@ const HomeScreen = () => {
         const friendsRef = ref(db, `friendships/${currentUID}/friendList`);
         const friendSnap = await get(friendsRef);
         const friendUIDs = friendSnap.exists() ? friendSnap.val() : [];
-
-        const friends = [];
 
         for (const uid of friendUIDs) {
           const userRef = ref(db, `users/${uid}`);
@@ -42,8 +41,17 @@ const HomeScreen = () => {
                 const filtered = prev.filter((f) => f.uid !== uid);
                 return [...filtered, friend];
               });
+
+              if (data.gps) {
+                const [lat, lon] = data.gps.split(',').map(parseFloat);
+                if (!isNaN(lat) && !isNaN(lon)) {
+                  webViewRef.current?.injectJavaScript(`
+                    updateMap('${uid}', ${lat}, ${lon}, '${data.email || uid}');
+                    true;
+                  `);
+                }
+              }
             } else {
-              // Remove if emergency turned off
               setEmergencyFriends((prev) => prev.filter((f) => f.uid !== uid));
             }
           });
@@ -59,58 +67,41 @@ const HomeScreen = () => {
     loadEmergencyFriends();
   }, [currentUID]);
 
-  const defaultRegion = {
-    latitude: 48.1351,
-    longitude: 11.5820,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  };
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🚨 Emergency Friends</Text>
 
       {loading ? (
         <ActivityIndicator size="large" color="#1e90ff" />
-      ) : emergencyFriends.length === 0 ? (
-        <Text style={styles.empty}>None of your friends are in emergency.</Text>
       ) : (
-        <>
-          <ScrollView style={styles.list}>
-            {emergencyFriends.map((friend) => (
+        <ScrollView style={styles.list}>
+          {emergencyFriends.length === 0 ? (
+            <Text style={styles.empty}>None of your friends are in emergency.</Text>
+          ) : (
+            emergencyFriends.map((friend) => (
               <View key={friend.uid} style={styles.friendItem}>
-                <Text style={styles.friendText}>
-                  {friend.email}
-                </Text>
+                <Text style={styles.friendText}>{friend.email}</Text>
                 <Text style={styles.gpsText}>
                   {friend.gps ? `📍 ${friend.gps}` : '⏳ Waiting for GPS fix...'}
                 </Text>
               </View>
-            ))}
-          </ScrollView>
-
-          <MapView
-            style={styles.map}
-            initialRegion={defaultRegion}
-            showsUserLocation={true}
-          >
-            {emergencyFriends
-              .filter((f) => f.gps)
-              .map((f) => {
-                const [lat, lon] = f.gps.split(',').map(parseFloat);
-                return (
-                  <Marker
-                    key={f.uid}
-                    coordinate={{ latitude: lat, longitude: lon }}
-                    title={f.email}
-                    description="Emergency location"
-                    pinColor="red"
-                  />
-                );
-              })}
-          </MapView>
-        </>
+            ))
+          )}
+        </ScrollView>
       )}
+
+      <WebView
+        ref={webViewRef}
+        source={{ uri: 'file:///android_asset/map_tracker.html' }}
+        originWhitelist={['*']}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        style={styles.map}
+        onLoadEnd={() => {
+          console.log("✅ Tracker Map loaded");
+        }}
+        onError={(e) => console.log("❌ WebView error:", e.nativeEvent)}
+      />
     </View>
   );
 };

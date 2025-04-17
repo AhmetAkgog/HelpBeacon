@@ -72,5 +72,6 @@ ios/Pods/
 build/
 .DS_Store
 
-firebaseConfig.js
+src/firebaseConfig.js
 android/app/google-services.json 
+functions/helpbeacon-*.json

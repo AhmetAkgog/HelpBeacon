@@ -13,6 +13,15 @@ import {
 import { BleManager, State } from 'react-native-ble-plx';
 import { decode as atob } from 'base-64';
 import { WebView } from 'react-native-webview';
+import { getDatabase, ref, set } from '@react-native-firebase/database'; // ✅ Modular Firebase
+import { getApp } from '@react-native-firebase/app'; // ✅ Modular Firebase
+import { getAuth } from 'firebase/auth';
+import { firebaseApp } from '../firebaseConfig';
+
+const app = getApp();
+console.log("🔥 Firebase App Name:", app.name);
+console.log("🌐 Firebase DB URL:", app.options.databaseURL);
+
 
 const manager = new BleManager();
 const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
@@ -24,6 +33,75 @@ const DeviceConnectionScreen = () => {
   const [gpsData, setGpsData] = useState('');
   const [gpsLog, setGpsLog] = useState([]);
   const webViewRef = useRef(null);
+  const hasSentSearching = useRef(false);
+
+  const uploadToFirebase = async (lat, lon, deviceId, bootTimeMs) => {
+    const now = new Date().toISOString();
+    const data = {
+      lat,
+      lon,
+      appTimestamp: now,
+      bootTimeMs,
+      deviceId,
+    };
+
+    const db = getDatabase(getApp());
+    const safeDeviceId = (deviceId || "unknown").replace(/[:.#$\[\]]/g, '_');
+
+    // 1. Save to /emergencies/{deviceId}
+    await set(ref(db, `/emergencies/${safeDeviceId}`), data)
+      .then(() => console.log("📡 Sent EMERGENCY GPS to Firebase:", data))
+      .catch(err => console.error("❌ Firebase upload failed:", err));
+
+    // 2. Also sync emergency state to /users/{uid}
+    const auth = getAuth();
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      const gpsString = `${lat},${lon}`;
+      await set(ref(db, `users/${uid}/emergency`), true);
+      await set(ref(db, `users/${uid}/gps`), gpsString);
+      console.log("✅ Synced emergency location to /users/" + uid);
+    } else {
+      console.warn("⚠️ No user logged in – cannot sync to /users/{uid}");
+    }
+  };
+
+
+  const uploadSearchStatus = async (deviceId) => {
+    console.log("🚨 uploadSearchStatus() called with:", deviceId);
+    console.log("📡 Writing data:", data);
+    console.log("📍 Firebase path: /emergencies/" + safeDeviceId);
+    const now = new Date().toISOString();
+    const db = getDatabase(getApp());
+    const auth = getAuth();
+    const uid = auth.currentUser?.uid;
+    const safeDeviceId = (deviceId || "unknown").replace(/[:.#$\[\]]/g, '_');
+
+    const data = {
+      status: "SEARCHING_FOR_GPS",
+      appTimestamp: now,
+      deviceId,
+      uid: uid || null
+    };
+
+    console.log("💾 Trying to write to /emergencies/" + safeDeviceId, data);
+
+    try {
+      await set(ref(db, `/emergencies/${safeDeviceId}`), data);
+      console.log("✅ SUCCESS writing to /emergencies");
+    } catch (err) {
+      console.error("❌ ERROR writing to /emergencies:", err.message);
+    }
+
+    if (uid) {
+        try {
+          await set(ref(db, `/emergencies/${safeDeviceId}`), data);
+          console.log("✅ SUCCESS writing to /emergencies/" + safeDeviceId);
+        } catch (err) {
+          console.error("❌ ERROR writing to /emergencies:", err.message);
+        }
+    }
+  };
 
   useEffect(() => {
     let stateSub = null;
@@ -67,7 +145,7 @@ const DeviceConnectionScreen = () => {
 
         if (!device || !device.name || deviceMap.current.has(device.id)) return;
 
-        if (device.name.includes('ESP')) {
+        if (device.name.includes('GPS')) {
           deviceMap.current.set(device.id, device);
           setDevices(Array.from(deviceMap.current.values()));
         }
@@ -126,12 +204,42 @@ const DeviceConnectionScreen = () => {
                     setGpsData(decoded);
                     setGpsLog(prev => [decoded, ...prev].slice(0, 20));
 
-                    const [lat, lon] = decoded.split(',').map(parseFloat);
-                    if (!isNaN(lat) && !isNaN(lon)) {
-                      webViewRef.current?.injectJavaScript(`
-                        updateMap(${lat}, ${lon});
-                        true;
-                      `);
+                    if (decoded.startsWith("EMERGENCY:")) {
+                      const raw = decoded.replace("EMERGENCY:", "");
+
+                      if (raw === "SEARCHING") {
+                        if (!hasSentSearching.current) {
+                              const deviceId = updatedDevice?.id || connectedDevice?.id || "unknown";
+                              console.log("🔗 Using device ID for SEARCHING:", deviceId);
+                              uploadSearchStatus(deviceId);
+                          hasSentSearching.current = true;
+                        }
+                      } else {
+                        const parts = raw.split(",");
+                        if (parts.length === 3) {
+                          const [timestamp, latStr, lonStr] = parts;
+                          const lat = parseFloat(latStr);
+                          const lon = parseFloat(lonStr);
+
+                          if (!isNaN(lat) && !isNaN(lon)) {
+                                const deviceId = updatedDevice?.id || connectedDevice?.id || "unknown";
+                                console.log("🔗 Using device ID for GPS FIX:", deviceId);
+                                uploadSearchStatus(deviceId);
+                            webViewRef.current?.injectJavaScript(`updateMap(${lat}, ${lon}); true;`);
+                            hasSentSearching.current = false; // Reset
+                          }
+                        }
+                      }
+                    } else if (decoded.startsWith("LOCAL:")) {
+                      const parts = decoded.replace("LOCAL:", "").split(",");
+                      if (parts.length === 3) {
+                        const [, latStr, lonStr] = parts;
+                        const lat = parseFloat(latStr);
+                        const lon = parseFloat(lonStr);
+                        if (!isNaN(lat) && !isNaN(lon)) {
+                          webViewRef.current?.injectJavaScript(`updateMap(${lat}, ${lon}); true;`);
+                        }
+                      }
                     }
                   }
                 }
@@ -149,7 +257,7 @@ const DeviceConnectionScreen = () => {
           manager.startDeviceScan(null, null, (error, device) => {
             if (error) return;
             if (!device || !device.name || deviceMap.current.has(device.id)) return;
-            if (device.name.includes("ESP")) {
+            if (device.name.includes("GPS")) {
               deviceMap.current.set(device.id, device);
               setDevices(Array.from(deviceMap.current.values()));
             }
@@ -203,14 +311,13 @@ const DeviceConnectionScreen = () => {
             )}
             ListHeaderComponent={
               <Text style={{ fontSize: 18, textAlign: 'center', marginBottom: 10 }}>
-                Nearby ESP32 Devices
+                Nearby GPS Devices
               </Text>
             }
           />
         )}
       </View>
 
-      {/* 🌍 Always show WebView below */}
       <View style={{ flex: 1 }}>
         <WebView
           ref={webViewRef}
